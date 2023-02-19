@@ -106,12 +106,11 @@
 		</div>
 	</div>
 	<div class="row">
-		<div class="column text-sm text-muted">
-			<p class="text-center">
-				Made with ❤️ by <a href="https://github.com/ayushsharma82" target="_blank">ayushsharma82</a>.
-			</p>
-			<p class="text-center">
-				<a href="https://www.buymeacoffee.com/6QGVpSj" target="_blank">Buy me a coffee ☕</a>
+		<div class="about column text-sm text-muted text-right">
+			Made with <svg viewBox="0 0 1792 1792" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="height: 0.8rem;"><path d="M896 1664q-26 0-44-18l-624-602q-10-8-27.5-26T145 952.5 77 855 23.5 734 0 596q0-220 127-344t351-124q62 0 126.5 21.5t120 58T820 276t76 68q36-36 76-68t95.5-68.5 120-58T1314 128q224 0 351 124t127 344q0 221-229 450l-623 600q-18 18-44 18z" fill="#e25555"></path></svg>
+			<p class="about-details">
+				created by <a href="https://github.com/ayushsharma82" target="_blank">ayushsharma82</a><br>
+				modified by <a href="https://github.com/momepp" target="_blank">MomePP</a>
 			</p>
 		</div>
 	</div>
@@ -141,6 +140,10 @@
 
 	.text-center{
 		text-align: center;
+	}
+
+	.text-right{
+		text-align: right;
 	}
 
 	.w-100{
@@ -264,6 +267,14 @@
 	.btn-loader{
 		margin: auto;
 		@include loader10;
+	}
+
+	.about-details{
+		display: none;
+	}
+
+	.about:hover .about-details{
+		display: block;
 	}
 
 </style>
