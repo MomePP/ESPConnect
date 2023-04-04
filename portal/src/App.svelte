@@ -52,6 +52,7 @@
 	}
 
 	async function updateAccessPoints() {
+		// const res = await fetch(`http://localhost:9000/espconnect/scan`);
 		const res = await fetch(`/espconnect/scan`);
 		if (res.status === 200) {
 			data.access_points = await res.json();
