@@ -1,7 +1,6 @@
 <script>
-	import {
-		onMount
-	} from 'svelte';
+	import { onMount } from 'svelte';
+
 	import Connect from './components/Connect.svelte';
 	import SelectScan from './components/SelectScan.svelte';
 	import Status from './components/Status.svelte';
@@ -18,6 +17,7 @@
 			direct_connect: false,
 			selected: false,
 			ssid: '',
+			type: '',
 			hidden: false
 		},
 		access_points: [] 
@@ -41,8 +41,9 @@
 
 	function selectAccessPoint(event) {
 		data.selection.ssid = event.detail.ssid
+		data.selection.type = event.detail.type
 		data.selection.hidden = event.detail.hidden
-		if(event.detail.open){
+		if(event.detail.type == "OPEN"){
 			data.selection.direct_connect = true
 		}
 		data.selection.selected = true;
@@ -100,7 +101,7 @@
 						{#if !data.selection.selected}
 							<SelectScan access_points={data.access_points} on:refresh={refresh} on:select={selectAccessPoint} />
 						{:else}
-							<Connect ssid={data.selection.ssid} hidden={data.selection.hidden} direct_connect={data.selection.direct_connect} on:back={clearSelection} on:success={setConnectSuccess} on:error={setConnectError} />
+							<Connect ssid={data.selection.ssid} type={data.selection.type} hidden={data.selection.hidden} direct_connect={data.selection.direct_connect} on:back={clearSelection} on:success={setConnectSuccess} on:error={setConnectError} />
 						{/if}
 					{:else}
 							<Status success={data.connectStatus.success} />

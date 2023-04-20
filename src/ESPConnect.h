@@ -4,16 +4,11 @@
 #include <Arduino.h>
 #include <functional>
 
-#if defined(ESP8266)
-#include "ESP8266WiFi.h"
-#include "ESPAsyncTCP.h"
-#include "WiFiClient.h"
-#elif defined(ESP32)
 #include "AsyncTCP.h"
 #include "Preferences.h"
 #include "WiFi.h"
 #include "WiFiClient.h"
-#endif
+#include "esp_wpa2.h"
 
 #include "DNSServer.h"
 #include "ESPAsyncWebServer.h"
@@ -31,6 +26,8 @@
 #define ESPCONNECT_SERIAL(x)
 #endif
 
+const char *const AUTH_MODE_NAMES[]{"OPEN", "WEP", "WPA_PSK", "WPA2_PSK", "WPA_WPA2_PSK", "WPA2_ENTERPRISE", "WPA3_PSK", "WPA2_WPA3_PSK", "WAPI_PSK", "OWE", "MAX"};
+
 class ESPConnectClass
 {
 
@@ -43,30 +40,29 @@ private:
     unsigned long _auto_connect_timeout = DEFAULT_PORTAL_TIMEOUT;
 
     String _sta_ssid = "";
+    String _sta_username = "";
     String _sta_password = "";
 
 private:
     void load_sta_credentials();
-    int save_sta_credentials(const String &ssid, const String &password);
-
-    // Start Captive portal
-    bool start_portal(bool isStoreCredential = true);
+    bool save_sta_credentials(const String &ssid, const String &username, const String &password);
 
 public:
     // Check if ESPConnect was configured before
     bool isConfigured();
 
+    // Manually start captive portal
+    bool startPortal(bool isStoreCredential = true);
+
     // Set Custom AP
-    void autoConnect(const char *ssid, const char *password = "", unsigned long timeout = DEFAULT_PORTAL_TIMEOUT);
-
-    // Connect to Saved WiFi Credentials
-    bool begin(AsyncWebServer *server, unsigned long timeout = DEFAULT_CONNECTION_TIMEOUT);
-
-    // Manually start portal config
-    bool startPortal(AsyncWebServer *server);
+    void setupPortal(AsyncWebServer *server, const char *ssid, const char *password = "", unsigned long timeout = DEFAULT_PORTAL_TIMEOUT);
 
     // Erase Saved WiFi Credentials
     bool erase();
+
+    // Manually config wifi credentials
+    bool setCredentials(const String &ssid, const String &username, const String &password);
+    bool setCredentials(const String &ssid, const String &password) { return setCredentials(ssid, "", password); }
 
     /*
       Data Getters
@@ -77,6 +73,7 @@ public:
 
     // Gets SSID of connected endpoint
     String getSSID();
+    String getUsername();
     String getPassword();
 };
 

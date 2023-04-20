@@ -15,53 +15,33 @@ bool ESPConnectClass::isConfigured()
 void ESPConnectClass::load_sta_credentials()
 {
     // Get saved WiFi Credentials
-#if defined(ESP8266)
-    station_config config = {};
-    wifi_station_get_config(&config);
-    for (int i = 0; i < strlen((char *)config.ssid); i++)
-    {
-        _sta_ssid += (char)config.ssid[i];
-    }
-    for (int i = 0; i < strlen((char *)config.password); i++)
-    {
-        _sta_password += (char)config.password[i];
-    }
-#elif defined(ESP32)
     Preferences preferences;
     preferences.begin("espconnect", false);
     _sta_ssid = preferences.getString("ssid", "");
+    _sta_username = preferences.getString("username", "");
     _sta_password = preferences.getString("password", "");
     preferences.end();
-#endif
 }
 
 /*
   Saves STA Credentials into memory
 */
-int ESPConnectClass::save_sta_credentials(const String &ssid, const String &password)
+bool ESPConnectClass::save_sta_credentials(const String &ssid, const String &username, const String &password)
 {
-    int ok = 0;
-// Save saved WiFi Credentials
-#if defined(ESP8266)
-    struct station_config config = {};
-    ssid.toCharArray((char *)config.ssid, sizeof(config.ssid));
-    password.toCharArray((char *)config.password, sizeof(config.password));
-    config.bssid_set = false;
-    ok = wifi_station_set_config(&config);
-#elif defined(ESP32)
+    // Save saved WiFi Credentials
     Preferences preferences;
-    preferences.begin("espconnect", false);
+    bool status = preferences.begin("espconnect", false);
     preferences.putString("ssid", ssid.c_str());
+    preferences.putString("username", username.c_str());
     preferences.putString("password", password.c_str());
     preferences.end();
-#endif
-    return ok;
+    return status;
 }
 
 /*
-  Start Captive Portal and Attach DNS & Webserver
+  Manually Start Captive Portal and Attach DNS & Webserver
 */
-bool ESPConnectClass::start_portal(bool isStoreCredential)
+bool ESPConnectClass::startPortal(bool isStoreCredential)
 {
     bool configured = false;
     ESPCONNECT_SERIAL("Starting Captive Portal\n");
@@ -69,11 +49,6 @@ bool ESPConnectClass::start_portal(bool isStoreCredential)
     WiFi.mode(WIFI_AP_STA);
     // Start Access Point
     WiFi.softAP(_auto_connect_ssid.c_str(), _auto_connect_password.c_str());
-
-    if (_sta_ssid != "")
-    {
-        WiFi.begin(_sta_ssid.c_str(), _sta_password.c_str());
-    }
 
     // Start our DNS Server
     _dns = new DNSServer();
@@ -98,7 +73,8 @@ bool ESPConnectClass::start_portal(bool isStoreCredential)
             }
             else
             {
-                for (int i = 0; i < n; ++i)
+                ESPCONNECT_SERIAL("Scan complete: %d ap\n", n);
+                for (uint8_t i = 0; i < n; ++i)
                 {
                     String ssid = WiFi.SSID(i);
                     // Escape invalid characters
@@ -106,16 +82,12 @@ bool ESPConnectClass::start_portal(bool isStoreCredential)
                     ssid.replace("\"", "\\\"");
                     json += "{";
                     json += "\"name\":\"" + ssid + "\",";
-#if defined(ESP8266)
-                    json += "\"open\":" + String(WiFi.encryptionType(i) == ENC_TYPE_NONE ? "true" : "false");
-#elif defined(ESP32)
-                    json += "\"open\":" + String(WiFi.encryptionType(i) == WIFI_AUTH_OPEN ? "true" : "false");
-#endif
+                    json += "\"type\":\"" + String(AUTH_MODE_NAMES[WiFi.encryptionType(i)]) + "\"";
                     json += "},";
                 }
-				json+="{\"name\":\"\",\"open\":false,\"hidden\":true}";
+                json += "{\"name\":\"\",\"type\": \"WPA2_PSK\",\"hidden\":true}";
                 WiFi.scanDelete();
-                if (WiFi.scanComplete() == -2)
+                if (WiFi.scanComplete() == WIFI_SCAN_FAILED)
                 {
                     WiFi.scanNetworks(true);
                 }
@@ -133,6 +105,7 @@ bool ESPConnectClass::start_portal(bool isStoreCredential)
         {
             // Get FormData
             String ssid = request->hasParam("ssid", true) ? request->getParam("ssid", true)->value().c_str() : "";
+            String username = request->hasParam("username", true) ? request->getParam("username", true)->value().c_str() : "";
             String password = request->hasParam("password", true) ? request->getParam("password", true)->value().c_str() : "";
 
             if (ssid.length() <= 0)
@@ -146,26 +119,21 @@ bool ESPConnectClass::start_portal(bool isStoreCredential)
             }
 
             // Save WiFi Credentials in Flash
-            int ok = 0;
+            bool stored_status = false;
             if (isStoreCredential)
-                ok = save_sta_credentials(ssid, password);
-#if defined(ESP8266)
-            if (ok == 1)
+                stored_status = save_sta_credentials(ssid, username, password);
+            if (stored_status)
             {
-#elif defined(ESP32)
-            if (ok == ESP_OK)
-            {
-#endif
                 configured = true;
                 _sta_ssid = ssid;
+                _sta_username = username;
                 _sta_password = password;
-                WiFi.begin(_sta_ssid.c_str(), _sta_password.c_str());
+
                 request->send(200, "application/json", "{\"message\":\"Credentials Saved. Rebooting...\"}");
             }
             else
             {
-                Serial.printf("WiFi config failed with: %d\n", ok);
-                return request->send(500, "application/json", "{\"message\":\"Error while saving WiFi Credentials: " + String(ok) + "\"}");
+                request->send(500, "application/json", "{\"message\":\"Error while saving WiFi Credentials\"}");
             }
         });
 
@@ -193,19 +161,10 @@ bool ESPConnectClass::start_portal(bool isStoreCredential)
     _server->begin();
 
     unsigned long lastMillis = millis();
-    while (WiFi.status() != WL_CONNECTED && (unsigned long)(millis() - lastMillis) < _auto_connect_timeout)
+    while ((unsigned long)(millis() - lastMillis) < _auto_connect_timeout && !configured)
     {
         _dns->processNextRequest();
         yield();
-    }
-
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        ESPCONNECT_SERIAL("Portal timed out\n");
-    }
-    else
-    {
-        ESPCONNECT_SERIAL("Connected to STA\n");
     }
 
     _server->removeHandler(&indexGET);
@@ -224,86 +183,20 @@ bool ESPConnectClass::start_portal(bool isStoreCredential)
 
     ESPCONNECT_SERIAL("Closed Portal\n");
     WiFi.softAPdisconnect(true);
-    if (configured)
-    {
-        WiFi.mode(WIFI_STA);
-        WiFi.begin(_sta_ssid.c_str(), _sta_password.c_str());
-        return true;
-    }
-    else
-    {
-        return false;
-    }
+    WiFi.mode(WIFI_OFF);
+
+    return configured;
 }
 
 /*
   Set Custom AP Credentials
 */
-void ESPConnectClass::autoConnect(const char *ssid, const char *password, unsigned long timeout)
+void ESPConnectClass::setupPortal(AsyncWebServer *server, const char *ssid, const char *password, unsigned long timeout)
 {
+    _server = server;
     _auto_connect_ssid = ssid;
     _auto_connect_password = password;
     _auto_connect_timeout = timeout;
-}
-
-/*
-  Connect to saved WiFi Credentials
-*/
-bool ESPConnectClass::begin(AsyncWebServer *server, unsigned long timeout)
-{
-    _server = server;
-
-    load_sta_credentials();
-
-    if (_sta_ssid != "")
-    {
-        ESPCONNECT_SERIAL("STA Pre-configured:\n");
-        ESPCONNECT_SERIAL("SSID: %s\n", _sta_ssid.c_str());
-        ESPCONNECT_SERIAL("Password: %s\n\n", _sta_password.c_str());
-        ESPCONNECT_SERIAL("Connecting to STA [");
-
-        // Try connecting to STA
-        WiFi.persistent(false);
-        WiFi.setAutoConnect(false);
-        WiFi.mode(WIFI_STA);
-        WiFi.begin(_sta_ssid.c_str(), _sta_password.c_str());
-
-        // Check WiFi connection status till timeout
-        unsigned long lastMillis = millis();
-        while (WiFi.status() != WL_CONNECTED && (unsigned long)(millis() - lastMillis) < timeout)
-        {
-            Serial.print("#");
-            delay(500);
-            yield();
-        }
-        Serial.print("]\n");
-
-        if (WiFi.status() != WL_CONNECTED)
-        {
-            ESPCONNECT_SERIAL("Connection to STA Falied [!]\n");
-        }
-    }
-
-    // Start Captive Portal if not connected to STA
-    if (WiFi.status() != WL_CONNECTED)
-    {
-        // Start captive portal
-        return start_portal();
-    }
-    else
-    {
-        ESPCONNECT_SERIAL("Connected to STA\n");
-        return true;
-    }
-}
-
-/*
-  Manually start portal config
-*/
-bool ESPConnectClass::startPortal(AsyncWebServer *server)
-{
-    _server = server;
-    return start_portal(false);
 }
 
 /*
@@ -311,25 +204,26 @@ bool ESPConnectClass::startPortal(AsyncWebServer *server)
 */
 bool ESPConnectClass::erase()
 {
-#if defined(ESP8266)
-    // -----------  Added this section to erase stored wifi credentials - RLB -20220318  --------
-    int ok = 0;
-    struct station_config config = {};
-    memset(&config.ssid, 0, sizeof(config.ssid));
-    memset(&config.password, 0, sizeof(config.password));
-    config.bssid_set = false;
-    ok = wifi_station_set_config(&config);
-    // -----------------------------------------------------------------------------------------
-    return WiFi.disconnect(true);
-#elif defined(ESP32)
     Preferences preferences;
-    preferences.begin("espconnect", false);
+    bool status = preferences.begin("espconnect", false);
     preferences.putString("ssid", "");
+    preferences.putString("username", "");
     preferences.putString("password", "");
     preferences.end();
     WiFi.disconnect(true, true);
-    return true;
-#endif
+    return status;
+}
+
+/*
+  Manually set wifi credentials and store in flash
+*/
+bool ESPConnectClass::setCredentials(const String &ssid, const String &username, const String &password)
+{
+    _sta_ssid = ssid;
+    _sta_username = username;
+    _sta_password = password;
+
+    return save_sta_credentials(ssid, username, password);
 }
 
 /*
@@ -343,6 +237,11 @@ bool ESPConnectClass::isConnected()
 String ESPConnectClass::getSSID()
 {
     return _sta_ssid;
+}
+
+String ESPConnectClass::getUsername()
+{
+    return _sta_username;
 }
 
 String ESPConnectClass::getPassword()
