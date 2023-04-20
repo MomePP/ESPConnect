@@ -14,7 +14,7 @@
     formData.append('ssid', ssid);
     formData.append('password', password);
     // let bodyJson = JSON.stringify(Object.fromEntries(formData.entries()))
-    // const res = await fetch(`/espconnect/connect`, { method: 'POST', body: bodyJson });
+    // const res = await fetch(`http://localhost:9000/espconnect/connect`, { method: 'POST', body: bodyJson });
     const res = await fetch(`/espconnect/connect`, { method: 'POST', body: formData });
 		if (res.status === 200) {
       dispatch('success');
