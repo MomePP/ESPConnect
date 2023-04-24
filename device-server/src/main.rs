@@ -8,15 +8,17 @@ use tide::Response;
 #[derive(serde::Deserialize)]
 struct ConnectionRequest {
     ssid: String,
+    username: String,
     password: String,
 }
 
 async fn scan_handler(_req: Request<()>) -> tide::Result {
     let res = Response::builder(tide::StatusCode::Ok)
         .body(json!([
-            { "name": "momeppkt", "open": false },
-            { "name": "tlic-test", "open": true },
-            { "name": "", "open": false, "hidden": true }
+            { "name": "momeppkt", "type": "WPA_WPA2_PSK" },
+            { "name": "tlic-test", "type": "OPEN" },
+            { "name": "@JumboPlus", "type": "WPA2_ENTERPRISE" },
+            { "name": "", "type": "WPA2_PSK", "hidden": true }
         ]))
         .build();
     Ok(res)
@@ -25,8 +27,9 @@ async fn scan_handler(_req: Request<()>) -> tide::Result {
 async fn connect_handler(mut req: Request<()>) -> tide::Result {
     let wifi_requested: ConnectionRequest = req.body_json().await?;
     log::info!(
-        "connecting to {}, [pwd: {}]",
+        "connecting to {}, [user: {}, pwd: {}]",
         wifi_requested.ssid,
+        wifi_requested.username,
         wifi_requested.password
     );
 

@@ -11,7 +11,7 @@
     {#if access_points.length > 0}
       <div class="column" style="margin-bottom: 3rem;">
         {#each access_points as ap}
-          <div class="row clickable-row" on:click={() => dispatch('select', { ssid: ap.name, open: ap.open, hidden: ap.hidden })}>
+          <div class="row clickable-row" on:click={() => dispatch('select', { ssid: ap.name, type: ap.type, hidden: ap.hidden })}>
             <div class="column">
               <div class="container">
                 <div class="row flex-rows">
@@ -23,7 +23,7 @@
                     {/if}
                   </div>
                   <div class="column w-auto">
-                    {#if !ap.open}
+                    {#if ap.type != "OPEN"}
                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" style="fill: currentColor"><path d="M20,12c0-1.103-0.897-2-2-2h-1V7c0-2.757-2.243-5-5-5S7,4.243,7,7v3H6c-1.103,0-2,0.897-2,2v8c0,1.103,0.897,2,2,2h12 c1.103,0,2-0.897,2-2V12z M9,7c0-1.654,1.346-3,3-3s3,1.346,3,3v3H9V7z"></path></svg>
                     {/if}
                   </div>
