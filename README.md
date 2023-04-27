@@ -8,7 +8,7 @@
 <p align="center">
 <img src="https://img.shields.io/github/last-commit/ayushsharma82/ESPConnect.svg?style=for-the-badge" />
 &nbsp;
-<img src="https://img.shields.io/github/workflow/status/ayushsharma82/ESPConnect/Arduino%20Library%20CI/main?style=for-the-badge" />
+<img src="https://img.shields.io/github/actions/workflow/status/ayushsharma82/ESPConnect/ci.yml?branch=main&style=for-the-badge" />
 &nbsp;
 <img src="https://img.shields.io/github/license/ayushsharma82/ESPConnect.svg?style=for-the-badge" />
 &nbsp;
@@ -27,6 +27,37 @@
 <h4 align="center">Portal Preview:</h4>
 <p align="center">
   <img src="/docs/preview.png" width="520">
+</p>
+
+<br>
+
+<h2>MomePP's fork notes</h2>
+This fork aims to getting ESPConnect working with GoGoBoard Platform. It been patched by this following changes.
+<p>
+  <h5>ESPConnect</h5>
+  <ul>
+      <li>Add credentials load/store interfaces</li>
+      <li>Add WPA2-Enterprise credentials support</li>
+      <li>Remove WiFi connection handler (acts only receiving input from user)</li>
+  	  <li>Remove ESP8266 compatibility</li>
+  </ul>
+  
+  <h5>Portal</h5>
+  <ul>
+      <li>Add WPA2-Enterprise support</li>
+      <li>Merge <a href="https://github.com/ayushsharma82/ESPConnect/pull/15">atfox98's PR</a></li>
+      <li>Update contributors list</li>
+      <li>Update portal logo to GoGoBoard</li>
+  </ul>
+
+  <h5>Mock Server</h5>
+  <ul>
+      <li>Add mockup server for development propose</li>
+      <ul>
+        <li>implement using tide (rust-lang)</li>
+        <li>Note: need to change portal endpoint to development server (eg. http://localhost:9000)</li>
+      </ul>
+  </ul>
 </p>
 
 <br>
@@ -65,45 +96,6 @@ Download the [Repository](https://github.com/ayushsharma82/ESPConnect/archive/ma
   </ul>
 </p>
 
-<br>
-
-<h2>Documentation</h2>
-<p>ESPConnect is a dead simple library which does your work in just 2 lines:</p>
-
-<br>
-
-#### `ESPConnect.isConfigured()`
-This function will return `true` or `false` depending on if ESPConnect was configured before or not. You can check with this function to perform certain functions before/after running ESPConnect portal.
-
-<br>
-
-#### `ESPConnect.autoConnect(const char* ssid, const char* password, unsigned long timeout)`
-This function sets the SSID and password for your captive portal. The third parameter - `timeout` is optional which tells the library to keep the captive portal running for `x` - milliseconds. (Default - `3 minutes`)
-
-<br>
-
-#### `ESPConnect.begin(AsyncWebServer *server)`
-Call this function after `autoConnect` to start the WiFi manager. This function will first try to connect to the previous configured WiFi credentials and if those are not found, it will spin up a captive portal. If the user doesn't sets the wifi credentials, the library will return to execute your rest of the code in the setup block.
-
-**Please note:** WiFi inactivity is managed by your code. If you think you need to reboot the MCU if there is no WiFi then please call the `ESP.restart()` function after checking `ESPConnect.begin()`'s response.
-
-<br>
-
-#### `ESPConnect.isConnected()`
-This function will return `true` or `false` depending on the WiFi STA connection status of your MCU. Use this to check if your MCU is connected to access point or not.
-
-<br>
-
-#### `ESPConnect.erase()`
-This function will erase configured WiFi STA connection details & and then proceed to disconnect the module.
-
-<br>
-<br>
-
-<h2>Examples</h2>
- 
- Checkout example for ESP8266 and ESP32 in `examples` directory. [Click Here](https://github.com/ayushsharma82/ESPConnect/tree/master/examples)
- 
 <br>
 
 <h2>Contributions</h2>

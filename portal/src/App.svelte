@@ -1,10 +1,11 @@
 <script>
-	import {
-		onMount
-	} from 'svelte';
+	import { onMount } from 'svelte';
+
 	import Connect from './components/Connect.svelte';
 	import SelectScan from './components/SelectScan.svelte';
 	import Status from './components/Status.svelte';
+
+	import GoGoLogo from './assets/gogoboard.png';
 
 	let data = {
 		loading: true,
@@ -15,9 +16,11 @@
 		selection: {
 			direct_connect: false,
 			selected: false,
-			ssid: ''
+			ssid: '',
+			type: '',
+			hidden: false
 		},
-		access_points: []
+		access_points: [] 
 	}
 
 	function setConnectSuccess(){
@@ -38,7 +41,9 @@
 
 	function selectAccessPoint(event) {
 		data.selection.ssid = event.detail.ssid
-		if(event.detail.open){
+		data.selection.type = event.detail.type
+		data.selection.hidden = event.detail.hidden
+		if(event.detail.type == "OPEN"){
 			data.selection.direct_connect = true
 		}
 		data.selection.selected = true;
@@ -50,9 +55,11 @@
 	}
 
 	async function updateAccessPoints() {
+		// const res = await fetch(`http://localhost:9000/espconnect/scan`);
 		const res = await fetch(`/espconnect/scan`);
 		if (res.status === 200) {
 			data.access_points = await res.json();
+			data.access_points = data.access_points.filter((thing, index, self) => self.findIndex(t => t.name === thing.name) === index)
 			data.loading = false;
 		}else if(res.status === 202) {
 			setTimeout(updateAccessPoints, 2000);
@@ -72,7 +79,8 @@
 <div class="container main-container">
 	<div class="row">
 		<div class="column text-center">
-			<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" class="logo"><path d="M5 12L3 12 3 21 12 21 12 19 5 19zM12 5L19 5 19 12 21 12 21 3 12 3z"></path></svg>
+			<!-- <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" class="logo"><path d="M5 12L3 12 3 21 12 21 12 19 5 19zM12 5L19 5 19 12 21 12 21 3 12 3z"></path></svg> -->
+			<img class="logo" src={GoGoLogo} alt="GoGo Board" >
 		</div>
 	</div>
 	<div class="row mb-2">
@@ -93,7 +101,7 @@
 						{#if !data.selection.selected}
 							<SelectScan access_points={data.access_points} on:refresh={refresh} on:select={selectAccessPoint} />
 						{:else}
-							<Connect ssid={data.selection.ssid} direct_connect={data.selection.direct_connect} on:back={clearSelection} on:success={setConnectSuccess} on:error={setConnectError} />
+							<Connect ssid={data.selection.ssid} type={data.selection.type} hidden={data.selection.hidden} direct_connect={data.selection.direct_connect} on:back={clearSelection} on:success={setConnectSuccess} on:error={setConnectError} />
 						{/if}
 					{:else}
 							<Status success={data.connectStatus.success} />
@@ -103,12 +111,12 @@
 		</div>
 	</div>
 	<div class="row">
-		<div class="column text-sm text-muted">
-			<p class="text-center">
-				Made with ❤️ by <a href="https://github.com/ayushsharma82" target="_blank">ayushsharma82</a>.
-			</p>
-			<p class="text-center">
-				<a href="https://www.buymeacoffee.com/6QGVpSj" target="_blank">Buy me a coffee ☕</a>
+		<div class="about column text-sm text-muted text-right">
+			Made with <svg viewBox="0 0 1792 1792" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="height: 0.8rem;"><path d="M896 1664q-26 0-44-18l-624-602q-10-8-27.5-26T145 952.5 77 855 23.5 734 0 596q0-220 127-344t351-124q62 0 126.5 21.5t120 58T820 276t76 68q36-36 76-68t95.5-68.5 120-58T1314 128q224 0 351 124t127 344q0 221-229 450l-623 600q-18 18-44 18z" fill="#e25555"></path></svg>
+			<p class="about-details">
+				<a href="https://github.com/ayushsharma82" target="_blank" rel="noreferrer">ayushsharma82</a><br>
+				<a href="https://github.com/atfox98" target="_blank" rel="noreferrer">atfox98</a><br>
+				<a href="https://github.com/momepp" target="_blank" rel="noreferrer">momepp</a>
 			</p>
 		</div>
 	</div>
@@ -138,6 +146,10 @@
 
 	.text-center{
 		text-align: center;
+	}
+
+	.text-right{
+		text-align: right;
 	}
 
 	.w-100{
@@ -261,6 +273,14 @@
 	.btn-loader{
 		margin: auto;
 		@include loader10;
+	}
+
+	.about-details{
+		display: none;
+	}
+
+	.about:hover .about-details{
+		display: block;
 	}
 
 </style>

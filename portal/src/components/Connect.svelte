@@ -3,15 +3,21 @@
   const dispatch = createEventDispatcher();
 
   export let ssid;
+  export let type;
+  export let hidden;
   export let direct_connect;
   let loading = false;
+  let username = "";
   let password = "";
 
   async function connect(){
     loading = true;
     let formData = new FormData();
     formData.append('ssid', ssid);
+    formData.append('username', username);
     formData.append('password', password);
+    // let bodyJson = JSON.stringify(Object.fromEntries(formData.entries()))
+    // const res = await fetch(`http://localhost:9000/espconnect/connect`, { method: 'POST', body: bodyJson });
     const res = await fetch(`/espconnect/connect`, { method: 'POST', body: formData });
 		if (res.status === 200) {
       dispatch('success');
@@ -47,9 +53,20 @@
       </div>
       <div class="row">
         <div class="column column-100">
-          <input type="text" placeholder="SSID" id="ssid" value={ssid} disabled required>
+          {#if hidden!=true}
+            <input type="text" placeholder="SSID" id="ssid" value={ssid} disabled required>
+          {:else}
+            <input type="text" placeholder="SSID" id="ssid" bind:value={ssid} required>
+          {/if}
         </div>
       </div>
+      {#if type=='WPA2_ENTERPRISE'}
+      <div class="row">
+        <div class="column column-100">
+          <input type="text" placeholder="WiFi Username" id="username" bind:value={username} disabled={loading} required>
+        </div>
+      </div>
+      {/if}
       <div class="row">
         <div class="column column-100">
           <input type="password" placeholder="WiFi Password" id="password" bind:value={password} disabled={loading} required minlength="8">
