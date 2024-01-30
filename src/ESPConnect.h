@@ -8,7 +8,7 @@
 #include "Preferences.h"
 #include "WiFi.h"
 #include "WiFiClient.h"
-#include "esp_wpa2.h"
+#include "esp_eap_client.h"
 
 #include "DNSServer.h"
 #include "ESPAsyncWebServer.h"
