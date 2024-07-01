@@ -142,7 +142,7 @@ bool ESPConnectClass::startPortal(bool isStoreCredential)
         HTTP_GET,
         [&](AsyncWebServerRequest *request)
         {
-            AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", ESPCONNECT_HTML, ESPCONNECT_HTML_SIZE);
+            AsyncWebServerResponse *response = request->beginResponse(200, "text/html", ESPCONNECT_HTML, ESPCONNECT_HTML_SIZE);
             response->addHeader("Content-Encoding", "gzip");
             request->send(response);
         });
@@ -150,7 +150,7 @@ bool ESPConnectClass::startPortal(bool isStoreCredential)
     _server->onNotFound(
         [&](AsyncWebServerRequest *request)
         {
-            AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", ESPCONNECT_HTML, ESPCONNECT_HTML_SIZE);
+            AsyncWebServerResponse *response = request->beginResponse(200, "text/html", ESPCONNECT_HTML, ESPCONNECT_HTML_SIZE);
             response->addHeader("Content-Encoding", "gzip");
             request->send(response);
         });
