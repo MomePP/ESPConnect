@@ -4,13 +4,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && gzip dist/index.html && node cppheader.js && cp dist/espconnect_webpage.h ../src/espconnect_webpage.h",
+    "build": "vite build && node gzip.js && node cppheader.js && cp dist/espconnect_webpage.h ../src/espconnect_webpage.h",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@gfx/zopfli": "^1.0.15",
     "@sveltejs/vite-plugin-svelte": "^1.1.0",
     "autoprefixer": "^10.4.7",
-    "gzip-cli": "^1.2.0",
     "node-sass": "^8.0.0",
     "postcss": "^8.4.14",
     "postcss-load-config": "^4.0.1",
