@@ -1,41 +1,125 @@
 #include "ESPConnect.h"
 
+#define ESPCONNECT_PREFS_NAMESPACE "espconnect"
+
+// Per-entry JSON overhead (`{"name":"","type":""},`) + longest auth name, and the SSID limit
+#define SCAN_JSON_ENTRY_OVERHEAD   48
+#define SCAN_JSON_SSID_MAX_LEN     32
+#define SCAN_JSON_HIDDEN_ENTRY     "{\"name\":\"\",\"type\": \"WPA2_PSK\",\"hidden\":true}"
+
+#define JSON_CONTROL_CHAR_LIMIT    0x20
+#define JSON_UNICODE_ESCAPE_DIGITS 4
+
+/*
+  Auth-mode name shown by the portal. The portal only distinguishes OPEN (no password field) and
+  WPA2_ENTERPRISE (username field), so every enterprise variant is reported as WPA2_ENTERPRISE
+  (the firmware connects with PEAP for any stored username). Unknown values fall back to WPA2_PSK.
+*/
+static const char *auth_mode_name(wifi_auth_mode_t mode)
+{
+    switch (mode)
+    {
+    case WIFI_AUTH_OPEN:
+        return "OPEN";
+    case WIFI_AUTH_WEP:
+        return "WEP";
+    case WIFI_AUTH_WPA_PSK:
+        return "WPA_PSK";
+    case WIFI_AUTH_WPA2_PSK:
+        return "WPA2_PSK";
+    case WIFI_AUTH_WPA_WPA2_PSK:
+        return "WPA_WPA2_PSK";
+    case WIFI_AUTH_WPA2_ENTERPRISE:
+    case WIFI_AUTH_WPA3_ENT_192:
+    case WIFI_AUTH_WPA3_ENTERPRISE:
+    case WIFI_AUTH_WPA2_WPA3_ENTERPRISE:
+    case WIFI_AUTH_WPA_ENTERPRISE:
+        return "WPA2_ENTERPRISE";
+    case WIFI_AUTH_WPA3_PSK:
+    case WIFI_AUTH_WPA3_EXT_PSK:
+    case WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE:
+        return "WPA3_PSK";
+    case WIFI_AUTH_WPA2_WPA3_PSK:
+        return "WPA2_WPA3_PSK";
+    case WIFI_AUTH_WAPI_PSK:
+        return "WAPI_PSK";
+    case WIFI_AUTH_OWE:
+        return "OWE";
+    default:
+        return "WPA2_PSK";
+    }
+}
+
+/*
+  Append `{"name":"<ssid>","type":"<type>"},` to json, escaping the SSID for JSON
+*/
+static void append_ap_json(String &json, const String &ssid, const char *type)
+{
+    json += "{\"name\":\"";
+    for (unsigned int i = 0; i < ssid.length(); ++i)
+    {
+        const char ch = ssid[i];
+        if (ch == '\\' || ch == '"')
+        {
+            json += '\\';
+            json += ch;
+        }
+        else if ((uint8_t)ch < JSON_CONTROL_CHAR_LIMIT)
+        {
+            char escaped[JSON_UNICODE_ESCAPE_DIGITS + 3];
+            snprintf(escaped, sizeof(escaped), "\\u%04x", (unsigned int)(uint8_t)ch);
+            json += escaped;
+        }
+        else
+        {
+            json += ch;
+        }
+    }
+    json += "\",\"type\":\"";
+    json += type;
+    json += "\"},";
+}
+
 /*
   Check if ESPConnect was configured before
 */
 bool ESPConnectClass::isConfigured()
 {
-    load_sta_credentials();
+    if (!_sta_loaded)
+        _sta_loaded = load_sta_credentials();
     return _sta_ssid.length() > 0;
 }
 
 /*
-  Loads STA Credentials into memory
+  Loads STA Credentials into memory. Returns false if the NVS namespace could not be opened.
 */
-void ESPConnectClass::load_sta_credentials()
+bool ESPConnectClass::load_sta_credentials()
 {
     // Get saved WiFi Credentials
     Preferences preferences;
-    preferences.begin("espconnect", false);
+    if (!preferences.begin(ESPCONNECT_PREFS_NAMESPACE, false))
+        return false;
     _sta_ssid = preferences.getString("ssid", "");
     _sta_username = preferences.getString("username", "");
     _sta_password = preferences.getString("password", "");
     preferences.end();
+    return true;
 }
 
 /*
-  Saves STA Credentials into memory
+  Saves STA Credentials into flash
 */
 bool ESPConnectClass::save_sta_credentials(const String &ssid, const String &username, const String &password)
 {
     // Save saved WiFi Credentials
     Preferences preferences;
-    bool status = preferences.begin("espconnect", false);
-    preferences.putString("ssid", ssid.c_str());
-    preferences.putString("username", username.c_str());
-    preferences.putString("password", password.c_str());
+    if (!preferences.begin(ESPCONNECT_PREFS_NAMESPACE, false))
+        return false;
+    preferences.putString("ssid", ssid);
+    preferences.putString("username", username);
+    preferences.putString("password", password);
     preferences.end();
-    return status;
+    return true;
 }
 
 /*
@@ -43,8 +127,10 @@ bool ESPConnectClass::save_sta_credentials(const String &ssid, const String &use
 */
 bool ESPConnectClass::startPortal(bool isStoreCredential)
 {
-    bool configured = false;
     ESPCONNECT_SERIAL("Starting Captive Portal\n");
+    _portal_configured = false;
+    _portal_store_credential = isStoreCredential;
+
     // Try Connecting Station
     WiFi.mode(WIFI_AP_STA);
     // Start Access Point
@@ -55,12 +141,11 @@ bool ESPConnectClass::startPortal(bool isStoreCredential)
     _dns->setErrorReplyCode(DNSReplyCode::NoError);
     _dns->start(53, "*", WiFi.softAPIP());
 
-    auto scanGET = _server->on(
+    auto &scanGET = _server->on(
         "/espconnect/scan",
         HTTP_GET,
-        [&](AsyncWebServerRequest *request)
+        [](AsyncWebServerRequest *request)
         {
-            String json = "[";
             int n = WiFi.scanComplete();
             if (n == WIFI_SCAN_FAILED)
             {
@@ -71,37 +156,28 @@ bool ESPConnectClass::startPortal(bool isStoreCredential)
             {
                 return request->send(202);
             }
-            else
+
+            ESPCONNECT_SERIAL("Scan complete: %d ap\n", n);
+            String json;
+            json.reserve(1 + n * (SCAN_JSON_ENTRY_OVERHEAD + SCAN_JSON_SSID_MAX_LEN) + sizeof(SCAN_JSON_HIDDEN_ENTRY) + 1);
+            json += '[';
+            for (uint8_t i = 0; i < n; ++i)
+                append_ap_json(json, WiFi.SSID(i), auth_mode_name(WiFi.encryptionType(i)));
+            json += SCAN_JSON_HIDDEN_ENTRY;
+            json += ']';
+            WiFi.scanDelete();
+            if (WiFi.scanComplete() == WIFI_SCAN_FAILED)
             {
-                ESPCONNECT_SERIAL("Scan complete: %d ap\n", n);
-                for (uint8_t i = 0; i < n; ++i)
-                {
-                    String ssid = WiFi.SSID(i);
-                    // Escape invalid characters
-                    ssid.replace("\\", "\\\\");
-                    ssid.replace("\"", "\\\"");
-                    json += "{";
-                    json += "\"name\":\"" + ssid + "\",";
-                    json += "\"type\":\"" + String(AUTH_MODE_NAMES[WiFi.encryptionType(i)]) + "\"";
-                    json += "},";
-                }
-                json += "{\"name\":\"\",\"type\": \"WPA2_PSK\",\"hidden\":true}";
-                WiFi.scanDelete();
-                if (WiFi.scanComplete() == WIFI_SCAN_FAILED)
-                {
-                    WiFi.scanNetworks(true);
-                }
+                WiFi.scanNetworks(true);
             }
-            json += "]";
             request->send(200, "application/json", json);
-            json = String();
         });
 
     // Accept incomming WiFi Credentials
-    auto connectPOST = _server->on(
+    auto &connectPOST = _server->on(
         "/espconnect/connect",
         HTTP_POST,
-        [&](AsyncWebServerRequest *request)
+        [this](AsyncWebServerRequest *request)
         {
             // Get FormData
             String ssid = request->hasParam("ssid", true) ? request->getParam("ssid", true)->value().c_str() : "";
@@ -119,17 +195,16 @@ bool ESPConnectClass::startPortal(bool isStoreCredential)
             }
 
             // Save WiFi Credentials in Flash
-            bool stored_status = false;
-            if (isStoreCredential)
-                stored_status = save_sta_credentials(ssid, username, password);
-            if (stored_status)
+            if (!_portal_store_credential || save_sta_credentials(ssid, username, password))
             {
-                configured = true;
                 _sta_ssid = ssid;
                 _sta_username = username;
                 _sta_password = password;
+                _sta_loaded = true;
 
                 request->send(200, "application/json", "{\"message\":\"Credentials Saved. Rebooting...\"}");
+                // Last: publishes the credentials above to the thread polling in startPortal()
+                _portal_configured = true;
             }
             else
             {
@@ -137,10 +212,10 @@ bool ESPConnectClass::startPortal(bool isStoreCredential)
             }
         });
 
-    auto indexGET = _server->on(
+    auto &indexGET = _server->on(
         "/espconnect",
         HTTP_GET,
-        [&](AsyncWebServerRequest *request)
+        [](AsyncWebServerRequest *request)
         {
             AsyncWebServerResponse *response = request->beginResponse(200, "text/html", ESPCONNECT_HTML, ESPCONNECT_HTML_SIZE);
             response->addHeader("Content-Encoding", "gzip");
@@ -148,23 +223,23 @@ bool ESPConnectClass::startPortal(bool isStoreCredential)
         });
 
     _server->onNotFound(
-        [&](AsyncWebServerRequest *request)
+        [](AsyncWebServerRequest *request)
         {
             AsyncWebServerResponse *response = request->beginResponse(200, "text/html", ESPCONNECT_HTML, ESPCONNECT_HTML_SIZE);
             response->addHeader("Content-Encoding", "gzip");
             request->send(response);
         });
 
-    auto portalRewrite = _server->rewrite("/", "/espconnect").setFilter(ON_AP_FILTER);
+    auto &portalRewrite = _server->rewrite("/", "/espconnect").setFilter(ON_AP_FILTER);
 
     // Begin Webserver
     _server->begin();
 
-    unsigned long lastMillis = millis();
-    while ((unsigned long)(millis() - lastMillis) < _auto_connect_timeout && !configured)
+    const unsigned long lastMillis = millis();
+    while ((unsigned long)(millis() - lastMillis) < _auto_connect_timeout && !_portal_configured)
     {
         _dns->processNextRequest();
-        yield();
+        delay(PORTAL_POLL_INTERVAL_MS);
     }
 
     _server->removeHandler(&indexGET);
@@ -182,10 +257,11 @@ bool ESPConnectClass::startPortal(bool isStoreCredential)
     _dns = nullptr;
 
     ESPCONNECT_SERIAL("Closed Portal\n");
+    WiFi.scanDelete();
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
 
-    return configured;
+    return _portal_configured;
 }
 
 /*
@@ -204,12 +280,14 @@ void ESPConnectClass::setupPortal(AsyncWebServer *server, const char *ssid, cons
 */
 bool ESPConnectClass::erase()
 {
-    Preferences preferences;
-    bool status = preferences.begin("espconnect", false);
-    preferences.putString("ssid", "");
-    preferences.putString("username", "");
-    preferences.putString("password", "");
-    preferences.end();
+    const bool status = save_sta_credentials("", "", "");
+    if (status)
+    {
+        _sta_ssid = "";
+        _sta_username = "";
+        _sta_password = "";
+        _sta_loaded = true;
+    }
     WiFi.disconnect(true, true);
     return status;
 }
@@ -222,6 +300,7 @@ bool ESPConnectClass::setCredentials(const String &ssid, const String &username,
     _sta_ssid = ssid;
     _sta_username = username;
     _sta_password = password;
+    _sta_loaded = true;
 
     return save_sta_credentials(ssid, username, password);
 }
@@ -232,21 +311,6 @@ bool ESPConnectClass::setCredentials(const String &ssid, const String &username,
 bool ESPConnectClass::isConnected()
 {
     return (WiFi.status() == WL_CONNECTED);
-}
-
-String ESPConnectClass::getSSID()
-{
-    return _sta_ssid;
-}
-
-String ESPConnectClass::getUsername()
-{
-    return _sta_username;
-}
-
-String ESPConnectClass::getPassword()
-{
-    return _sta_password;
 }
 
 ESPConnectClass ESPConnect;

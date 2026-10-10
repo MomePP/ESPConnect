@@ -2,6 +2,7 @@
 #define ESPConnect_h
 
 #include <Arduino.h>
+#include <atomic>
 #include <functional>
 
 #include "AsyncTCP.h"
@@ -20,13 +21,14 @@
 #define DEFAULT_CONNECTION_TIMEOUT 30000
 #define DEFAULT_PORTAL_TIMEOUT     180000
 
+// Sleep between DNS polls while the portal runs; lets lower-priority tasks and the idle task run.
+#define PORTAL_POLL_INTERVAL_MS    1
+
 #if ESPCONNECT_DEBUG == 1
 #define ESPCONNECT_SERIAL(fmt, ...) log_i("[ESPConnect][%lu] " fmt, millis(), ##__VA_ARGS__)
 #else
-#define ESPCONNECT_SERIAL(x)
+#define ESPCONNECT_SERIAL(fmt, ...)
 #endif
-
-const char *const AUTH_MODE_NAMES[]{"OPEN", "WEP", "WPA_PSK", "WPA2_PSK", "WPA_WPA2_PSK", "WPA2_ENTERPRISE", "WPA3_PSK", "WPA2_WPA3_PSK", "WAPI_PSK", "OWE", "MAX"};
 
 class ESPConnectClass
 {
@@ -42,9 +44,14 @@ private:
     String _sta_ssid = "";
     String _sta_username = "";
     String _sta_password = "";
+    bool _sta_loaded = false;
+
+    // Set by the async web server task once credentials are accepted; polled by startPortal()
+    std::atomic<bool> _portal_configured{false};
+    bool _portal_store_credential = true;
 
 private:
-    void load_sta_credentials();
+    bool load_sta_credentials();
     bool save_sta_credentials(const String &ssid, const String &username, const String &password);
 
 public:
@@ -72,9 +79,9 @@ public:
     bool isConnected();
 
     // Gets SSID of connected endpoint
-    String getSSID();
-    String getUsername();
-    String getPassword();
+    const String &getSSID() const { return _sta_ssid; }
+    const String &getUsername() const { return _sta_username; }
+    const String &getPassword() const { return _sta_password; }
 };
 
 extern ESPConnectClass ESPConnect;
