@@ -36,8 +36,10 @@ static const char *auth_mode_name(wifi_auth_mode_t mode)
     case WIFI_AUTH_WPA_ENTERPRISE:
         return "WPA2_ENTERPRISE";
     case WIFI_AUTH_WPA3_PSK:
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0) // IDF 6 removed the WPA3 EXT PSK modes (placeholders WIFI_AUTH_DUMMY_1/2)
     case WIFI_AUTH_WPA3_EXT_PSK:
     case WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE:
+#endif
         return "WPA3_PSK";
     case WIFI_AUTH_WPA2_WPA3_PSK:
         return "WPA2_WPA3_PSK";
