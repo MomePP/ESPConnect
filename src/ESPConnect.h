@@ -58,8 +58,10 @@ public:
     // Check if ESPConnect was configured before
     bool isConfigured();
 
-    // Manually start captive portal
-    bool startPortal(bool isStoreCredential = true);
+    // Manually start captive portal. Blocks until credentials are submitted, the portal times out,
+    // or shouldCancel (polled every PORTAL_POLL_INTERVAL_MS, may be null) returns true.
+    // Returns true only when credentials were submitted.
+    bool startPortal(bool isStoreCredential = true, const std::function<bool()> &shouldCancel = nullptr);
 
     // Set Custom AP
     void setupPortal(AsyncWebServer *server, const char *ssid, const char *password = "", unsigned long timeout = DEFAULT_PORTAL_TIMEOUT);
