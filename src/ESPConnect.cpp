@@ -127,7 +127,7 @@ bool ESPConnectClass::save_sta_credentials(const String &ssid, const String &use
 /*
   Manually Start Captive Portal and Attach DNS & Webserver
 */
-bool ESPConnectClass::startPortal(bool isStoreCredential)
+bool ESPConnectClass::startPortal(bool isStoreCredential, const std::function<bool()> &shouldCancel)
 {
     ESPCONNECT_SERIAL("Starting Captive Portal\n");
     _portal_configured = false;
@@ -238,7 +238,7 @@ bool ESPConnectClass::startPortal(bool isStoreCredential)
     _server->begin();
 
     const unsigned long lastMillis = millis();
-    while ((unsigned long)(millis() - lastMillis) < _auto_connect_timeout && !_portal_configured)
+    while ((unsigned long)(millis() - lastMillis) < _auto_connect_timeout && !_portal_configured && !(shouldCancel && shouldCancel()))
     {
         _dns->processNextRequest();
         delay(PORTAL_POLL_INTERVAL_MS);
